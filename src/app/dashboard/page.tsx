@@ -13,6 +13,7 @@ import {
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { ProductModal } from '@/components/ProductModal';
+import { v4 as uuidv4 } from 'uuid';
 
 interface Product {
   id: string;
@@ -74,12 +75,20 @@ export default function Dashboard() {
         })
       );
 
+      const productId = uuidv4()
+
       const newProduct = {
+        id: productId,
         ...productData,
         images: imageUrls,
       };
 
-      await addDoc(collection(db, 'Products'), newProduct);
+      const docRef = await addDoc(collection(db, 'Products'), {
+        id: productId,
+        ...productData,
+        images: imageUrls
+      })
+      // await addDoc(collection(db, 'Products', productId), newProduct);
       await fetchProducts();
       setIsModalOpen(false);
     } catch (err) {
