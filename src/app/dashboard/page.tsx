@@ -9,7 +9,10 @@ import {
   addDoc, 
   updateDoc, 
   deleteDoc, 
-  doc 
+  doc, 
+  getDoc,
+  query,
+  where
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { ProductModal } from '@/components/ProductModal';
@@ -99,16 +102,29 @@ export default function Dashboard() {
 
   const handleUpdateProduct = async (productId: string, productData: Partial<Product>, files: File[]) => {
     try {
-      const productRef = doc(db, 'Products', productId);
+      const actualProductId = editingProduct?.id;
+  
+      if (!actualProductId) {
+        setError('Brak ID produktu');
+        return;
+      }
+
       
       // Znajdź aktualny produkt w stanie
-      const currentProduct = products.find(p => p.id === productId);
-      if (!currentProduct) {
-        throw new Error('Product not found');
+      const querySnapshot = await getDocs(
+        query(collection(db, 'Products'), 
+              where('id', '==', productId))
+      );
+  
+      if (querySnapshot.empty) {
+        console.error('Product not found:', productId);
+        setError('Nie znaleziono produktu do aktualizacji');
+        return;
       }
       
       // Zachowaj istniejące obrazy i dodaj nowe
-      let imageUrls = [...(currentProduct.images || [])];
+      const docRef = querySnapshot.docs[0].ref;
+      let imageUrls = [...(productData.images || [])];
       
       // Dodaj nowe obrazy jeśli są
       if (files.length > 0) {
@@ -132,10 +148,11 @@ export default function Dashboard() {
         colors: productData.colors || [],
         sizes: productData.sizes || [],
         images: imageUrls,
+        id: productId
       };
   
       // Aktualizuj dokument
-      await updateDoc(productRef, updateData);
+      await updateDoc(docRef, updateData);
       await fetchProducts(); // Odśwież listę produktów
       setEditingProduct(null);
       setIsModalOpen(false);
@@ -148,6 +165,17 @@ export default function Dashboard() {
   const handleDeleteProduct = async (productId: string, imageUrls: string[]) => {
     if (window.confirm('Czy na pewno chcesz usunąć ten produkt?')) {
       try {
+      const querySnapshot = await getDocs(
+          query(collection(db, 'Products'), 
+                where('id', '==', productId))
+        );
+
+        if (querySnapshot.empty) {
+          console.error('Product not found:', productId);
+          setError('Nie znaleziono produktu do usunięcia');
+          return;
+        }
+
         // Delete images from storage
         await Promise.all(
           imageUrls.map(async url => {
@@ -161,7 +189,7 @@ export default function Dashboard() {
         );
 
         // Delete product document
-        await deleteDoc(doc(db, 'Products', productId));
+        await deleteDoc(querySnapshot.docs[0].ref);
         await fetchProducts();
       } catch (err) {
         console.error('Error deleting product:', err);
